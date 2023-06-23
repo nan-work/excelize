@@ -94,6 +94,52 @@ func (f *File) GetCellType(sheet, cell string) (CellType, error) {
 	return cellType, err
 }
 
+// CellContainsFormula returns true if the given cell in the given sheet contains a formula.
+func (f *File) CellContainsFormula(sheet, cell string) (bool, error) {
+	ws, err := f.workSheetReader(sheet)
+	if err != nil {
+		return false, err
+	}
+	cell, err = ws.mergeCellsParser(cell)
+	if err != nil {
+		return false, err
+	}
+	_, row, err := CellNameToCoordinates(cell)
+	if err != nil {
+		return false, err
+	}
+
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+
+	lastRowNum := 0
+	if l := len(ws.SheetData.Row); l > 0 {
+		lastRowNum = ws.SheetData.Row[l-1].R
+	}
+
+	// keep in mind: row starts from 1
+	if row > lastRowNum {
+		return false, nil
+	}
+
+	for rowIdx := range ws.SheetData.Row {
+		rowData := &ws.SheetData.Row[rowIdx]
+		if rowData.R != row {
+			continue
+		}
+		for colIdx := range rowData.C {
+			colData := &rowData.C[colIdx]
+			if cell != colData.R {
+				continue
+			}
+
+			return colData.F != nil, nil
+		}
+	}
+
+	return false, nil
+}
+
 // SetCellValue provides a function to set the value of a cell. This function
 // is concurrency safe. The specified coordinates should not be in the first
 // row of the table, a complex number can be set with string text. The
